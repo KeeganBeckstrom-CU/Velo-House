@@ -1980,6 +1980,7 @@ function renderToday(){
 
 // ---------- player Home: when mound work starts ----------
 function startDatesPanel(){
+  return '';   // removed for Velo House
   if(isPersonal()||NT(S)) return '';
   const left=k=>Math.round((parse(k)-todayD)/864e5);
   const row=(t,wkOf,first,more)=>{ const n=left(first); return `<div class="sdrow ${n<=0?'done':''}"><div><b>${t}</b><span>${wkOf}</span><small>${more}</small></div><em>${n<=0?'✓ Started':n===1?'Tomorrow':`In ${n} days`}</em></div>`; };
