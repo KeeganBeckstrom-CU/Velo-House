@@ -1561,7 +1561,7 @@ const rosterOf=st=>st&&st.pid?ROSTER_BY_ID[st.pid]:null;
 const pct=v=>v==null?'—':v+'%';
 const baa=v=>v==null?'—':String(v.toFixed(3)).replace(/^0/,'');
 function bioLine(st){
-  const bits=[st.town,st.hs&&('HS: '+st.hs),st.prev&&('Prev: '+st.prev)].filter(Boolean);
+  const bits=[st.town,st.hs&&('HS: '+st.hs)].filter(Boolean);
   return bits.length?bits.map(esc).join(' · '):'';
 }
 function statsStrip(st,compact){
@@ -2019,7 +2019,8 @@ function teamWeek(st,wk){
   const clean={role:st.role,program:st.program,weeks:{},overrides:{},coach:{weeks:{},overrides:{},plans:(st.coach&&st.coach.plans)||{},planLive:(st.coach&&st.coach.planLive)||{}}};
   const w=applyFixes(clean,wk,baseWeekFor(clean,wk)); return [...Array(7)].map((_,i)=>w[ymd(addDays(parse(wk),i))]||null);
 }
-function genRecord(st,wk){
+function genRecord(st,wk){ const r=genRecord0(st,wk); if(r) return r; return [...Array(7)].some((_,i)=>{ const k=ymd(addDays(parse(wk),i)); return teamOffOn(k)&&!HOL_BASE_OFF[k]; })?[]:r; }
+function genRecord0(st,wk){
   const key=wKey(st,wk), cw=coachWeekOf(st,key), cg=st.coach&&st.coach.gen&&st.coach.gen[wk];
   const rec=cg||(cw?null:(st.gen&&st.gen[wk]));
   if(rec) return rec.sig===moundSig(effectiveCfg(st,wk))?rec.off:null;   // he moved a mound day by hand since: his week runs on his picks
@@ -2029,7 +2030,8 @@ function genRecord(st,wk){
 function genWeek(st,wk,sel){
   const T=teamWeek(st,wk), c=effectiveCfg(st,wk), days=[...Array(7)].map((_,i)=>ymd(addDays(parse(wk),i)));
   if(!T.some(Boolean)) return null;
-  const hol=days.map((k,i)=>HOLIDAY_OFF[k]?i:-1).filter(i=>i>=0);
+  const hol=days.map((k,i)=>HOL_BASE_OFF[k]?i:-1).filter(i=>i>=0);
+  sel=[...(sel||[]),...days.map((k,i)=>teamOffOn(k)&&!HOL_BASE_OFF[k]?i:-1).filter(i=>i>=0)];   // program off days count as picked off days
   const tOff=T.map((p,i)=>p&&p.kind==='off'&&!hol.includes(i)?i:-1).filter(i=>i>=0);
   const mine=[...new Set(sel)].filter(i=>!hol.includes(i)), offs=new Set([...mine,...hol]);
   for(const i of tOff){ if(mine.length+[...offs].filter(x=>!mine.includes(x)&&!hol.includes(x)).length>=tOff.length) break; offs.add(i); }   // never fewer off days than the plan gives
@@ -3582,8 +3584,24 @@ function personalWeek(st,wk,c){
 // Days: 0=Sun … 6=Sat. Numbers are pitch counts. Edit here to change the staff plan.
 const SB_START='2026-11-16';    // Marty’s Short Boxes start the week of 11/16 (pitchers can still add one earlier; they get a reminder)
 const PEN_START='2026-11-30';   // bullpens start the week of 11/30, first one Fri 12/4 (same: allowed earlier, with a reminder)
-const HOLIDAY_OFF={'2026-11-26':'off','2026-12-25':'off'};   // designated team off days
-const HOLIDAY_NAME={'2026-11-26':'Thanksgiving','2026-12-25':'Christmas'};
+const HOL_BASE_OFF={'2026-11-26':'off','2026-12-25':'off'};   // designated team off days
+const HOL_BASE_NAME={'2026-11-26':'Thanksgiving','2026-12-25':'Christmas'};
+// Program off days set by the coaches (Coach's View): weekdays that are off every week, plus single dates.
+// Saved on the coach's account (S.teamOff) and copied to every pitcher (coach.teamOff), like the note to all pitchers.
+// They only apply from the day they were set, so past weeks never change.
+const TEAM_OFF_NAME='Program off day';
+function teamOffCfg(){
+  try{
+    const coachMode=isCoachUser()&&!window.VIEW_AS;
+    if(!coachMode) return (S&&S.coach&&S.coach.teamOff)||null;
+    if(S&&S.teamOff) return S.teamOff;
+    return staff().map(x=>x.a.coach&&x.a.coach.teamOff).filter(Boolean).sort((x,y)=>String(y.at||y.on).localeCompare(String(x.at||x.on)))[0]||null;
+  }catch(e){ return null; }
+}
+function teamOffOn(k){ const c=teamOffCfg(); if(!c||typeof k!=='string'||!/^\d{4}-\d\d-\d\d$/.test(k)) return false; if(c.on&&k<c.on) return false;
+  return (c.dates||[]).includes(k)||(c.days||[]).includes(parse(k).getDay()); }
+const HOLIDAY_OFF=new Proxy(HOL_BASE_OFF,{get:(t,k)=>t[k]||(teamOffOn(k)?'off':undefined)});
+const HOLIDAY_NAME=new Proxy(HOL_BASE_NAME,{get:(t,k)=>t[k]||(teamOffOn(k)?TEAM_OFF_NAME:undefined)});
 const fmtWk=k=>`the week of ${fmtMD(k)}`;
 function earlyNote(kind,k){
   if(kind==='sb'&&k<SB_START) return `Heads up: the plan doesn't have Marty’s Short Boxes until ${fmtWk(SB_START)}. You can still throw one. Just let your coach know.`;
@@ -3936,7 +3954,7 @@ function whyDay(p,k,byCoachDay){
   const nx=hardNear(k,1), pv=planFor(S,ymd(addDays(parse(k),-1)));
   const nxt=nx?`your ${esc(label(nx.p).toLowerCase())} on ${dayName(nx.k)}`:'your next mound day';
   const isSP=!monthInfo(weekMonth(weekKeyOf(parse(k)))).split||S.role!=='RP';
-  if(typeof HOLIDAY_NAME!=='undefined'&&HOLIDAY_NAME[k]) return `${HOLIDAY_NAME[k]}: team off day. No throwing or training.`;
+  if(typeof HOLIDAY_NAME!=='undefined'&&HOLIDAY_NAME[k]) return HOLIDAY_NAME[k]===TEAM_OFF_NAME?'Program off day, set by your coaches. No throwing or training.':`${HOLIDAY_NAME[k]}: team off day. No throwing or training.`;
   if(byCoachDay) return 'Your coach changed this day for you.';
   if(p.gen&&p.kind==='off') return 'Your off day. The rest of your week is built around it.';
   if(p.gen&&p.tag==='gen'&&(p.kind==='light'||p.kind==='mod'||p.kind==='nothrow')) return `From the team plan, moved to fit your off day${nx?'. Next up: '+nxt:''}.`;
@@ -5289,7 +5307,6 @@ function renderAccount(){
       ${profileFields()}
       <div class="field"><label for="aTown">Hometown</label><input id="aTown" type="text" value="${esc(S.town||'')}" placeholder="City, State"></div>
       <div class="field"><label for="aHs">High school</label><input id="aHs" type="text" value="${esc(S.hs||'')}" placeholder="High school"></div>
-      <div class="field"><label for="aPrev">Previous college (if any)</label><input id="aPrev" type="text" value="${esc(S.prev||'')}" placeholder="Junior college or transfer school"></div>
       <div class="field"><label for="aGrad">Grad year</label><input id="aGrad" type="text" inputmode="numeric" maxlength="4" value="${esc(S.grad||'')}" placeholder="2028"></div>`}
       ${isCoachUser()&&!VIEWING()?`<div class="field"><span class="lbl">Pitch grips (unfinished)</span><div class="seg" id="aGrips"><button type="button" data-v="0" aria-pressed="${!coachS().showGrips}">Hidden</button><button type="button" data-v="1" aria-pressed="${!!coachS().showGrips}">Show to me</button></div><p class="hint" style="margin:6px 0 0">Pitchers never see grips while this feature is unfinished. "Show to me" turns on the Grips tab in Coach's View, and grip work when you look at a pitcher's app, for your account only.</p></div>`:''}
       ${!window.CLOUD_MODE&&S.pid?'<button type="button" class="btn ghost sm" id="aSwitch" style="align-self:flex-start">Preview: switch profile or go back to coach</button>':''}
@@ -5307,7 +5324,7 @@ function renderAccount(){
   const dn=document.getElementById('aDone'); if(dn) dn.addEventListener('click',()=>{ if(needsSetup()) return; acctSetup=false; closeAccount(); goWeek(todayD); selected=TODAY; render(); hWeekOff=0; location.hash='home'; toast('Now set your bullpen and off days under Set My Week'); });
   const sw=document.getElementById('aSwitch'); if(sw) sw.onclick=()=>{ delete S.pid; save(); window.PICK_SKIPPED=false; try{ localStorage.removeItem('vhPickSkip'); }catch(e){} render(); openAccount(true); };
   wireProfileFields();
-  [['aTown','town','Hometown'],['aHs','hs','High school'],['aPrev','prev','Previous college'],['aGrad','grad','Grad year']].forEach(([id,k,l])=>{ const el=document.getElementById(id); if(!el) return; el.addEventListener('input',()=>{ const v=el.value.trim(); if(k==='grad'){ S.grad=/^\d{4}$/.test(v)?+v:null; if(S.grad&&CLASS_BY_GRAD[S.grad]) S.grade=CLASS_BY_GRAD[S.grad]; } else S[k]=v; save(); document.getElementById('aSaved').textContent=l+' saved'; }); });
+  [['aTown','town','Hometown'],['aHs','hs','High school'],['aGrad','grad','Grad year']].forEach(([id,k,l])=>{ const el=document.getElementById(id); if(!el) return; el.addEventListener('input',()=>{ const v=el.value.trim(); if(k==='grad'){ S.grad=/^\d{4}$/.test(v)?+v:null; if(S.grad&&CLASS_BY_GRAD[S.grad]) S.grade=CLASS_BY_GRAD[S.grad]; } else S[k]=v; save(); document.getElementById('aSaved').textContent=l+' saved'; }); });
   const t=document.getElementById('aTeam'); if(t && TEAMS_OPEN) t.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.team=b.dataset.v; save(); t.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); document.getElementById('aSaved').textContent=`Team saved: ${TEAM_NAME[S.team]}`; });
 }
 function openAccount(setup){ acctSetup=setup===true; acctReturn=document.activeElement; renderAccount(); const sh=document.getElementById('acctSheet'); sh.classList.toggle('setup',acctSetup); sh.hidden=false; requestAnimationFrame(()=>sh.classList.add('on')); setTimeout(()=>{ if(!sh.hidden) sh.classList.add('on'); },80); { const f=acctSetup?(document.getElementById('pkQ')||document.getElementById('aName')):document.getElementById('acctX'); if(f) f.focus(); } }
@@ -5602,6 +5619,65 @@ document.addEventListener('click',async e=>{
     await loadTeam(); renderCoach();
   }catch(err){ b.disabled=false; toast('Could not change it: '+((err&&err.message)||'try again')); }
 });
+</script>
+
+
+<style>
+.vhoff .vhdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:8px 0 4px}
+.vhoff .vhdays button{min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:700 14px var(--display);letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+.vhoff .vhdays button[aria-pressed="true"]{background:#00A0D2;border-color:#00A0D2;color:#fff}
+.vhoff .vhdates{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.vhoff .vhdates span{display:inline-flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;border-radius:999px;border:1px solid var(--line);font-size:13.5px}
+.vhoff .vhdates button{width:28px;height:28px;border-radius:50%;border:0;background:var(--bg);color:var(--ink);font-size:16px;cursor:pointer}
+.vhoff input[type=date]{background:var(--bg);color:inherit;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:16px;min-height:44px}
+.vhoff .vhsum{font-size:14px;color:var(--muted);margin:2px 0 0}
+</style>
+<script>
+// ===== Coach's View: program off days =====
+let VH_OFF=null;   // the draft being edited: {days:[0-6], dates:['YYYY-MM-DD']}
+const VH_DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], VH_DOWL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const vhOffSame=(a,b)=>JSON.stringify([(a&&a.days||[]).slice().sort(),(a&&a.dates||[]).slice().sort()])===JSON.stringify([(b&&b.days||[]).slice().sort(),(b&&b.dates||[]).slice().sort()]);
+const vhOffStart=()=>ymd(weekStart(todayD))===TODAY?TODAY:ymd(addDays(weekStart(todayD),7));   // off days start with the next full week, so the week in progress is never reshuffled
+function vhOffText(c){ const d=(c&&c.days||[]).slice().sort().map(i=>VH_DOWL[i]), x=(c&&c.dates||[]).filter(k=>k>=TODAY).length;
+  if(!d.length&&!x) return 'No program off days set. Pitchers pick their own off days.';
+  return [d.length?`Off every ${d.join(' and ')}`:'', x?`${x} single date${x===1?'':'s'} off`:''].filter(Boolean).join(' · ')+'. Every pitcher\'s week is built around this.'; }
+function renderTeamOff(){
+  const host=document.querySelector('#tab-coach-view .content'); if(!host) return;
+  let el=document.getElementById('vhOff'); if(!el){ el=document.createElement('section'); el.id='vhOff'; el.className='panel stack vhoff'; const first=host.querySelector('.panel'); if(first&&first.nextSibling) host.insertBefore(el,first.nextSibling); else host.appendChild(el); }
+  if(!isCoachUser()||window.VIEW_AS){ el.hidden=true; return; } el.hidden=false;
+  const cur=teamOffCfg()||{days:[],dates:[]}; if(!VH_OFF) VH_OFF={days:(cur.days||[]).slice(),dates:(cur.dates||[]).filter(k=>k>=TODAY)};
+  const dirty=!vhOffSame(VH_OFF,{days:cur.days||[],dates:(cur.dates||[]).filter(k=>k>=TODAY)});
+  el.innerHTML=`<div class="lrow"><div><h2 class="h2" style="font-size:20px">Program off days</h2><p class="hint" style="margin-top:4px">Pick the days nobody throws. Each pitcher's schedule is rebuilt around them, starting ${(()=>{ const d=parse(vhOffStart()); return vhOffStart()===TODAY?'today':VH_DOWL[d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate(); })()}. This week and past weeks don't change.</p></div></div>
+    <div><span class="lbl">Off every week</span><div class="vhdays">${VH_DOW.map((d,i)=>`<button type="button" data-vhoffd="${i}" aria-pressed="${VH_OFF.days.includes(i)}" aria-label="${VH_DOWL[i]}">${d}</button>`).join('')}</div></div>
+    <div><span class="lbl">Single dates off</span>
+      <div class="vhdates">${VH_OFF.dates.slice().sort().map(k=>{ const d=parse(k); return `<span>${VH_DOW[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}<button type="button" data-vhoffx="${k}" aria-label="Remove ${k}">×</button></span>`; }).join('')||'<span style="border-style:dashed;padding-right:12px;color:var(--muted)">None</span>'}</div>
+      <div class="row"><input type="date" id="vhOffDate" min="${vhOffStart()}" aria-label="Date to make an off day"><button type="button" class="btn ghost sm" id="vhOffAdd">Add date</button></div></div>
+    <div class="row"><button type="button" class="btn ${dirty?'':'ghost'} sm" id="vhOffSave" ${dirty?'':'disabled'}>${dirty?'Save and rebuild every schedule':'Saved'}</button>${dirty?'<button type="button" class="btn ghost sm" id="vhOffUndo">Undo changes</button>':''}</div>
+    <p class="vhsum"><b>Now:</b> ${esc(vhOffText(cur))}</p>`;
+}
+function vhPushTeamOff(cfg){
+  let n=0; staff().forEach(({id,a})=>{ a.coach=a.coach||{weeks:{},overrides:{}}; if(vhOffSame(a.coach.teamOff,cfg)&&(!!a.coach.teamOff===!!cfg)) return;
+    if(cfg) a.coach.teamOff=cfg; else delete a.coach.teamOff; try{ planCaches.delete(a); }catch(e){} coachChanged(id); n++; }); return n;
+}
+function vhSaveTeamOff(){
+  const empty=!VH_OFF.days.length&&!VH_OFF.dates.length;
+  const cfg=empty?null:{days:VH_OFF.days.slice().sort(),dates:VH_OFF.dates.slice().sort(),on:vhOffStart(),at:new Date().toISOString()};
+  if(cfg) S.teamOff=cfg; else delete S.teamOff; save();
+  staff().forEach(({a})=>{ if(a.coach&&!cfg) delete a.coach.teamOff; });
+  vhPushTeamOff(cfg); try{ clearCache(); staff().forEach(({a})=>planCaches.delete(a)); }catch(e){}
+  VH_OFF=null; renderCoach(); toast(cfg?'Off days saved. Every schedule is rebuilt around them.':'Program off days cleared.');
+}
+// a pitcher who signed up after the off days were set gets them the next time a coach opens the app
+function vhSyncTeamOff(){ try{ if(!isCoachUser()||window.VIEW_AS) return; const cfg=teamOffCfg(); if(!cfg) return; vhPushTeamOff(cfg); }catch(e){} }
+document.addEventListener('click',e=>{
+  const d=e.target.closest&&e.target.closest('[data-vhoffd]'); if(d&&VH_OFF){ const i=+d.dataset.vhoffd; VH_OFF.days=VH_OFF.days.includes(i)?VH_OFF.days.filter(x=>x!==i):[...VH_OFF.days,i]; renderTeamOff(); return; }
+  const x=e.target.closest&&e.target.closest('[data-vhoffx]'); if(x&&VH_OFF){ VH_OFF.dates=VH_OFF.dates.filter(k=>k!==x.dataset.vhoffx); renderTeamOff(); return; }
+  if(e.target.closest&&e.target.closest('#vhOffAdd')){ const v=(document.getElementById('vhOffDate')||{}).value; if(!v){ toast('Pick a date first.'); return; } if(v<vhOffStart()){ toast('Pick a date in next week or later.'); return; } if(VH_OFF&&!VH_OFF.dates.includes(v)) VH_OFF.dates.push(v); renderTeamOff(); return; }
+  if(e.target.closest&&e.target.closest('#vhOffSave')){ if(VH_OFF.days.length>=6){ toast('That leaves at most one day a week to throw. Take a day or two back off the list.'); return; } vhSaveTeamOff(); return; }
+  if(e.target.closest&&e.target.closest('#vhOffUndo')){ VH_OFF=null; renderTeamOff(); return; }
+});
+{ const _rc=renderCoach; renderCoach=function(){ const r=_rc.apply(this,arguments); try{ renderTeamOff(); }catch(e){} return r; };
+  if(typeof loadTeam==='function'){ const _lt=loadTeam; loadTeam=async function(){ const r=await _lt.apply(this,arguments); vhSyncTeamOff(); return r; }; } }
 </script>
 
 </body>
