@@ -1307,6 +1307,8 @@ details.cvdd[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
 details.cvdd>summary .chip{flex:none}
 details.cvdd>.cvdd-b{padding:0 18px 18px}
 #cvBody>details.cvdd+details.cvdd,#cvBody>details.cvdd+section,#cvBody>section+details.cvdd{margin-top:12px}
+.vhacct2 .vhrow:first-child{border-top:0}
+.vhacct2 .vhrow{padding-left:0;padding-right:0}
 </style>
 </head>
 <body>
@@ -1485,7 +1487,7 @@ details.cvdd>.cvdd-b{padding:0 18px 18px}
     <section class="panel">
       <div class="toolbar">
         <div><h2 class="h2">Coach's View</h2><p class="hint" style="margin-top:4px" id="cvSub"></p></div>
-        <div class="row"><div class="seg3 cvnav" id="cvNav" aria-label="Coach views"><button type="button" data-v="today">Today</button><button type="button" data-v="pitchers">Pitchers</button><button type="button" data-v="week">Week</button><button type="button" data-v="plans">Plans</button><button type="button" data-v="grips">Grips</button></div>
+        <div class="row"><div class="seg3 cvnav" id="cvNav" aria-label="Coach views"><button type="button" data-v="today">Today</button><button type="button" data-v="pitchers">Pitchers</button><button type="button" data-v="week">Week</button><button type="button" data-v="plans">Plans</button><button type="button" data-v="accounts">Accounts</button><button type="button" data-v="grips">Grips</button></div>
           <button class="btn ghost sm" type="button" id="cvClearEx">Remove examples</button></div>
       </div>
     </section>
@@ -3245,8 +3247,6 @@ const ROUTINE_INFO = {
 const HELP = [
   ['What do I do each day?', `<p>Open <b>Daily Work</b>. It lists today's work in order: <b>1. Before you throw</b> (mobility, pre-throw, plyo), <b>2. Throw</b>, <b>3. After you throw</b> (rotator cuff, scap, mobility), then conditioning if it's on your card. Tap the ✓ on each routine when it's done.</p>`],
   ['How do I set my bullpen and off days?', `<p>On <b>Home</b>, under <b>Set My Week</b>, tap the day and pick Bullpen, Marty’s Short Box, Live or Off day. Add the pitch count right there. Check <b>every week</b> to keep the same bullpen day. The rest of your week rebuilds around it.</p>`],
-  ['When do Marty’s Short Boxes and bullpens start?', `<ul><li><b>Until the week of 11/16:</b> the plan has no mound work. Catch play and arm care.</li><li><b>Week of 11/16:</b> Marty’s Short Boxes start, 20 pitches, with a high-intensity throw 3 days before. </li><li><b>Week of 11/30:</b> bullpens start. Marty’s Short Box 20 on Tue 12/1, then your first bullpen (20) on Fri 12/4.</li><li><b>Week of 12/7:</b> Marty’s Short Box 20 + bullpen 20. Then two bullpens a week: 20 and 30 (week of 12/13), 25 and 30 (week of 12/20), 25 (week of 12/27).</li><li><b>Lives:</b> start the week of Jan 24.</li><li><b>Team off days:</b> Thanksgiving (11/26) and Christmas (12/25).</li></ul><p>You can still add a Marty’s Short Box or bullpen before those dates. The app just reminds you the plan doesn't have one yet, so let your coach know.</p><p>Every bullpen and Marty’s Short Box lists your pitches in order on <b>Daily Work</b> (Bullpen Script 1 to 4).</p>`],
-  ['I have my own pitching coach. What do I pick?', `<p>Switch the toggle at the top to <b>Personal Program</b>. You still mark your bullpens and off days on Home and log every day, and your coach still sees your workload. Velo House workouts and videos are hidden.</p>`],
   ['What do the colors mean?', `<ul><li><b>Red:</b> high intensity (live, bullpen, Marty’s Short Box or a hard throwing day)</li><li><b>Yellow:</b> moderate</li><li><b>Green:</b> light</li><li><b>Blue:</b> no throw</li><li><b>Gray:</b> off</li></ul><p>Tap any color in the color key for more.</p>`],
   ['How do I log my day?', `<p>Tap <b>Log today</b> on Home, or open the <b>Log</b> tab. Fill in how hard you threw, how many throws or pitches, how your arm feels, any soreness or pain, and a note on how you felt. It takes about 30 seconds.</p>`],
   ["I can't throw today. What do I do?", `<p>On <b>Daily Work</b>, tap <b>Make it an off day</b> or <b>Make it a no-throw day</b>. Tap <b>Back to plan</b> to undo it. Don't make up a missed day by doubling up the next day.</p>`],
@@ -5084,7 +5084,7 @@ const teamOpts=[['all','All teams'],...TEAMS];
 const teamFilter=cur=>'';
 
 // ---------- view state ----------
-let cvTab='today'; try{ const t=localStorage.getItem('vhCvTab'); if(['today','pitchers','week'].includes(t)) cvTab=t; }catch(e){}
+let cvTab='today'; try{ const t=localStorage.getItem('vhCvTab'); if(['today','pitchers','week','accounts'].includes(t)) cvTab=t; }catch(e){}
 let tdOff=0;
 let pq='', pRole='all', pGrade='all', pTeam='all', pSort='alerts', pRulesOpen=false, cmp=[];
 let wkView=weekStart(todayD), wRole='all', wGrade='all', wTeam='all', wInt='all', wMode='both';
@@ -5099,6 +5099,7 @@ function renderCoach(){
   document.getElementById('cvClearEx').hidden=!list.some(x=>x.a.ex);
   document.getElementById('cvSub').textContent=list.some(x=>x.a.ex)?'Showing made-up example pitchers. Signed in as a coach, this shows every pitcher with an account.':`${list.length} pitchers on staff.`;
   const body=document.getElementById('cvBody');
+  if(cvTab==='accounts'){ renderAccounts(); return; }
   if(!list.length){ body.innerHTML='<section class="panel"><p class="hint">No pitchers yet. They show up here once they create an account and sign in.</p></section>'; return; }
   syncPlans();
   (({today:renderToday,pitchers:renderPitchers,week:renderWeekBoard,plans:renderPlans,grips:renderGrips})[cvTab]||renderToday)(); try{ vidCoachPanel(); }catch(e){}
@@ -5493,7 +5494,7 @@ async function loadTeam(){
     C.athletes['u-'+p.id]={ ...st, pid:st.pid||null, name:p.full_name||'Unnamed pitcher', role:st.role||'SP', grade:st.grade||null, penDay:(st.penDay==null?null:st.penDay), team:st.team||null, ht:st.ht||null, wt:st.wt||null, velo:st.velo||null, throws:st.throws||null, phone:st.phone||null, arsenal:st.arsenal||[], program:st.program||null, weeks:st.weeks||{}, overrides:st.overrides||{}, coach:(pd&&pd.coach_edits)||{weeks:{},overrides:{}}, logs:(pd&&pd.logs)||{}, sent:pd&&pd.updated_at?pd.updated_at.slice(0,10):null };
   });
   const nAcct=Object.keys(C.athletes).length; seedRoster(true);
-  note.innerHTML=`<div class="lrow"><div><h2 class="h2" style="font-size:20px">Live staff data</h2><p class="hint">${nAcct} player${nAcct===1?' has':'s have'} signed up. Names, phone numbers and logs show up here as players save them.</p></div><button class="btn ghost sm" type="button" id="cvRefresh">Refresh</button></div>${vhAccountsHTML()}`;
+  note.innerHTML=`<div class="lrow"><div><h2 class="h2" style="font-size:20px">Live staff data</h2><p class="hint">${nAcct} player${nAcct===1?' has':'s have'} signed up. Names, phone numbers and logs show up here as players save them.</p></div><button class="btn ghost sm" type="button" id="cvRefresh">Refresh</button></div>`;
   document.getElementById('cvRefresh').onclick=()=>loadTeam().then(renderCoach);
 }
 
@@ -5775,6 +5776,23 @@ document.addEventListener('click',e=>{
 });
 { const _rt=renderTeamOff; renderTeamOff=function(){ const r=_rt.apply(this,arguments); try{ renderTeamInt(); }catch(e){} return r; };
   if(typeof loadTeam==='function'){ const _lt=loadTeam; loadTeam=async function(){ const r=await _lt.apply(this,arguments); vhSyncTeamInt(); return r; }; } }
+</script>
+
+
+<script>
+function renderAccounts(){
+  const body=document.getElementById('cvBody'); if(!body) return;
+  const live=!!window.CLOUD_MODE, A=(window.VH_ACCOUNTS||[]).slice().sort((x,y)=>String(x.name).localeCompare(String(y.name)));
+  const me=(typeof ME!=='undefined'&&ME&&ME.id)||'';
+  const row=a=>{ const c=a.role==='coach', self=a.id===me, arm=VH_ARM===a.id;
+    return `<div class="vhrow"><div><b>${esc(a.name||'No name yet')}<i class="vhtag ${c?'c':''}">${c?'Coach':'Player'}</i></b><span>${esc(a.email||'')}</span></div>${self?'<span>This is you</span>':`<button type="button" class="btn ${arm?'':'ghost'} sm" data-vhrole="${esc(a.id)}" data-to="${c?'player':'coach'}">${arm?'Tap again to confirm':c?'Make player':'Make coach'}</button>`}</div>`; };
+  const coaches=A.filter(a=>a.role==='coach'), players=A.filter(a=>a.role!=='coach');
+  const group=(key,title,list,empty)=>`<details class="panel cvdd vhacct2" data-dd="${key}" ${vhDD(key,true)}><summary><span><h2 class="h2">${title}</h2><small>${list.length}</small></span></summary><div class="cvdd-b vhacct" style="border:0;margin:0;background:none">${list.length?list.map(row).join(''):`<p class="hint" style="padding:0">${empty}</p>`}</div></details>`;
+  body.innerHTML=`<section class="panel stack" style="gap:8px"><div class="lrow"><div><h2 class="h2" style="font-size:20px">Accounts</h2><p class="hint" style="margin-top:4px">Everyone who signs up starts as a player. Tap <b>Make coach</b> next to a name, then tap again to confirm. He gets Coach's View the next time he opens the app.</p></div>${live?'<button class="btn ghost sm" type="button" id="vhAcctRefresh">Refresh</button>':''}</div></section>
+    ${live?group('acoach','Coaches',coaches,'No coaches yet.')+group('aplayer','Players',players,'No players have signed up yet. They show up here as soon as they create an account.')
+          :'<section class="panel"><p class="hint">Accounts show up here on the live site once people sign up. This test copy has no sign-in, so there is no one to list.</p></section>'}`;
+  const r=document.getElementById('vhAcctRefresh'); if(r) r.onclick=async()=>{ r.disabled=true; try{ await loadTeam(); }catch(e){} renderCoach(); };
+}
 </script>
 
 </body>
