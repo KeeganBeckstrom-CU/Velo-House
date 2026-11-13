@@ -2019,7 +2019,7 @@ function teamWeek(st,wk){
   const clean={role:st.role,program:st.program,weeks:{},overrides:{},coach:{weeks:{},overrides:{},plans:(st.coach&&st.coach.plans)||{},planLive:(st.coach&&st.coach.planLive)||{}}};
   const w=applyFixes(clean,wk,baseWeekFor(clean,wk)); return [...Array(7)].map((_,i)=>w[ymd(addDays(parse(wk),i))]||null);
 }
-function genRecord(st,wk){ const r=genRecord0(st,wk); if(r) return r; return [...Array(7)].some((_,i)=>{ const k=ymd(addDays(parse(wk),i)); return teamOffOn(k)&&!HOL_BASE_OFF[k]; })?[]:r; }
+function genRecord(st,wk){ const r=genRecord0(st,wk); if(r) return r; return [...Array(7)].some((_,i)=>{ const k=ymd(addDays(parse(wk),i)); return (teamOffOn(k)&&!HOL_BASE_OFF[k])||teamIntOn(k); })?[]:r; }
 function genRecord0(st,wk){
   const key=wKey(st,wk), cw=coachWeekOf(st,key), cg=st.coach&&st.coach.gen&&st.coach.gen[wk];
   const rec=cg||(cw?null:(st.gen&&st.gen[wk]));
@@ -2036,6 +2036,7 @@ function genWeek(st,wk,sel){
   const mine=[...new Set(sel)].filter(i=>!hol.includes(i)), offs=new Set([...mine,...hol]);
   for(const i of tOff){ if(mine.length+[...offs].filter(x=>!mine.includes(x)&&!hol.includes(x)).length>=tOff.length) break; offs.add(i); }   // never fewer off days than the plan gives
   const avail=days.map((_,i)=>i).filter(i=>!offs.has(i));
+  const tInt=days.map(k=>teamIntOn(k)), noHigh=new Set(tInt.map((v,i)=>v&&v!=='high'?i:-1).filter(i=>i>=0)), wantHigh=new Set(tInt.map((v,i)=>v==='high'?i:-1).filter(i=>i>=0));
   // hard days: mound days from his week settings (the plan's, unless he moved one), plus the plan's high-intensity throw
   const n=(T.find(p=>p&&p.post&&/\d$/.test(p.post))||{post:'x 1'}).post.slice(-1);
   const pc=(kind,i)=>(c.pcDay&&c.pcDay[i])||(c.pitches&&c.pitches[kind])||'';
@@ -2047,15 +2048,17 @@ function genWeek(st,wk,sel){
   const moved=[], removed=[];
   // mound days in the weeks around this one, as day offsets from this Sunday
   const near=(()=>{ const pd=pickedDates(st,wk), a=[]; for(const k in pd){ const off=Math.round((parse(k)-parse(wk))/864e5); if(off<0||off>6) a.push({i:off,kind:pd[k]}); } return a; })();
-  for(const h of highs){ if(!offs.has(h.i)) continue;
+  for(const h of highs){ if(!offs.has(h.i)&&!noHigh.has(h.i)) continue;
     const fixed=[...highs.filter(x=>x!==h&&!offs.has(x.i)),...near.filter(x=>Math.abs(x.i-h.i)<=9)];
     const taken=new Set(fixed.map(x=>x.i));
-    const cands=avail.filter(i=>!taken.has(i)&&fixed.every(x=>Math.abs(x.i-i)>=moundGap(h.kind,x.kind)))
-      .map(i=>({i,gap:Math.min(9,...fixed.map(t=>Math.abs(t.i-i))),d:Math.abs(i-h.i)}))
-      .sort((a,b)=>(Math.min(b.gap,3)-Math.min(a.gap,3))||(a.d-b.d)||(b.i-a.i));
+    const cands=avail.filter(i=>!taken.has(i)&&!noHigh.has(i)&&fixed.every(x=>Math.abs(x.i-i)>=moundGap(h.kind,x.kind)))
+      .map(i=>({i,gap:Math.min(9,...fixed.map(t=>Math.abs(t.i-i))),d:Math.abs(i-h.i),w:wantHigh.has(i)?1:0}))
+      .sort((a,b)=>(b.w-a.w)||(Math.min(b.gap,3)-Math.min(a.gap,3))||(a.d-b.d)||(b.i-a.i));
     if(cands.length){ moved.push([h.kind,h.i,cands[0].i]); h.i=cands[0].i; } else { removed.push([h.kind,h.i]); h.drop=true; }
   }
-  highs=highs.filter(h=>!h.drop); const H={}; highs.forEach(h=>H[h.i]=h);
+  highs=highs.filter(h=>!h.drop);
+  { const tossSrc=T.find(p=>p&&p.kind==='toss')||null; wantHigh.forEach(i=>{ if(!offs.has(i)&&!highs.some(h=>h.i===i)) highs.push({i,kind:'toss',src:tossSrc,team:true}); }); highs.sort((a,b)=>a.i-b.i); }   // a day coaches set to high with no mound day on it is a high-intensity throw
+  const H={}; highs.forEach(h=>H[h.i]=h);
   // what the plan does around its own hard days
   const tH=i=>T[i]&&G_HIGH.includes(T[i].kind)?T[i].kind:null;
   const rel={before:{},after:{},other:[],rest:[]};
@@ -2087,7 +2090,12 @@ function genWeek(st,wk,sel){
     if(H[i]){ const h=H[i], s=h.src||{};
       out[k]={date:k,kind:h.kind,intensity:'high',mobility:mob,preThrow:'Pre-Throw 1',plyo:'Plyo 1',post:s.post||('Mobility '+n),cond:s.cond,gen:true,auto:false,manual:false,
         event:(s.event&&!h.n&&s.kind===h.kind&&/Pen\/Live/.test(s.event)?s.event:(s.event&&/Pen\/Live/.test(s.event)&&h.kind==='pen'?'Pen/Live':EV[h.kind])+(h.n&&h.kind!=='toss'?` · ${h.n} pitches`:''))}; return; }
-    const {src,tag}=plan[i];
+    let {src,tag}=plan[i];
+    const want=tInt[i];
+    if(want&&want!=='high'&&src.kind!==want){   // coaches set this day's intensity
+      const like=T.find(p=>p&&p.kind===want)||rel.other.find(p=>p.kind===want);
+      src=like||(want==='nothrow'?{kind:'nothrow',intensity:'none'}:want==='mod'?{kind:'mod',intensity:'mod',preThrow:LIB['Pre-Throw 2']?'Pre-Throw 2':'Pre-Throw 3',plyo:LIB['Plyo 2']?'Plyo 2':'Plyo 3',post:'Scap '+n}:lightDay);
+      tag='program'; }
     out[k]={date:k,kind:src.kind,intensity:src.intensity,mobility:mob,preThrow:src.preThrow,plyo:src.plyo,post:src.post,cond:src.cond,event:src.kind==='nothrow'?'No Throw':undefined,tag,gen:true,auto:false,manual:false};
   });
   return {out,offs:[...offs].sort(),highs,moved,removed,extra:[...offs].filter(i=>!mine.includes(i)&&!hol.includes(i))};
@@ -3598,6 +3606,17 @@ function teamOffCfg(){
     return staff().map(x=>x.a.coach&&x.a.coach.teamOff).filter(Boolean).sort((x,y)=>String(y.at||y.on).localeCompare(String(x.at||x.on)))[0]||null;
   }catch(e){ return null; }
 }
+function teamIntCfg(){
+  try{
+    const coachMode=isCoachUser()&&!window.VIEW_AS;
+    if(!coachMode) return (S&&S.coach&&S.coach.teamInt)||null;
+    if(S&&S.teamInt) return S.teamInt;
+    return staff().map(x=>x.a.coach&&x.a.coach.teamInt).filter(Boolean).sort((x,y)=>String(y.at||y.on).localeCompare(String(x.at||x.on)))[0]||null;
+  }catch(e){ return null; }
+}
+// the intensity coaches set for this date ('high' | 'mod' | 'light' | 'nothrow'), or null when the plan decides
+function teamIntOn(k){ const c=teamIntCfg(); if(!c||!c.days||typeof k!=='string'||!/^\d{4}-\d\d-\d\d$/.test(k)) return null; if(c.on&&k<c.on) return null;
+  return c.days[parse(k).getDay()]||null; }
 function teamOffOn(k){ const c=teamOffCfg(); if(!c||typeof k!=='string'||!/^\d{4}-\d\d-\d\d$/.test(k)) return false; if(c.on&&k<c.on) return false;
   return (c.dates||[]).includes(k)||(c.days||[]).includes(parse(k).getDay()); }
 const HOLIDAY_OFF=new Proxy(HOL_BASE_OFF,{get:(t,k)=>t[k]||(teamOffOn(k)?'off':undefined)});
@@ -5678,6 +5697,66 @@ document.addEventListener('click',e=>{
 });
 { const _rc=renderCoach; renderCoach=function(){ const r=_rc.apply(this,arguments); try{ renderTeamOff(); }catch(e){} return r; };
   if(typeof loadTeam==='function'){ const _lt=loadTeam; loadTeam=async function(){ const r=await _lt.apply(this,arguments); vhSyncTeamOff(); return r; }; } }
+</script>
+
+
+<style>
+.vhint .vhrows{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.vhint .vhr{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center}
+.vhint .vhr>b{font:700 14px var(--display);letter-spacing:.05em;text-transform:uppercase}
+.vhint .vhseg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.vhint .vhseg button{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:700 12.5px var(--display);letter-spacing:.04em;text-transform:uppercase;cursor:pointer;padding:0 2px}
+.vhint .vhseg button[aria-pressed="true"]{color:#fff}
+.vhint .vhseg button[data-v=""][aria-pressed="true"]{background:#2A3C4B;border-color:#2A3C4B}
+.vhint .vhseg button[data-v="light"][aria-pressed="true"]{background:var(--lt);border-color:var(--lt)}
+.vhint .vhseg button[data-v="mod"][aria-pressed="true"]{background:var(--mo);border-color:var(--mo);color:#1A1400}
+.vhint .vhseg button[data-v="high"][aria-pressed="true"]{background:var(--hi);border-color:var(--hi)}
+.vhint .vhseg button[data-v="nothrow"][aria-pressed="true"]{background:var(--nt);border-color:var(--nt)}
+.vhint .vhoffrow{grid-column:2;font-size:13px;color:var(--muted);padding:10px 2px}
+</style>
+<script>
+// ===== Coach's View: program week by intensity =====
+let VH_INT=null;   // draft: {0..6: 'light'|'mod'|'high'|'nothrow'}
+const VH_INTS=[['','Plan'],['light','Light'],['mod','Mod'],['high','High'],['nothrow','No throw']];
+const VH_INTL={light:'light',mod:'moderate',high:'high',nothrow:'no throw'};
+const vhIntSame=(a,b)=>{ const n=o=>JSON.stringify(Object.keys(o||{}).filter(k=>(o||{})[k]).sort().map(k=>[k,o[k]])); return n(a)===n(b); };
+function vhIntText(c){ const d=c&&c.days||{}, ks=Object.keys(d).filter(k=>d[k]).sort();
+  if(!ks.length) return "Not set. Each day's intensity comes from the plan.";
+  return ks.map(k=>`${VH_DOW[k]} ${VH_INTL[d[k]]}`).join(' · ')+". Every pitcher's week is built around this."; }
+function renderTeamInt(){
+  const off=document.getElementById('vhOff'); if(!off) return;
+  let el=document.getElementById('vhInt'); if(!el){ el=document.createElement('section'); el.id='vhInt'; el.className='panel stack vhint'; off.parentNode.insertBefore(el,off.nextSibling); }
+  if(!isCoachUser()||window.VIEW_AS){ el.hidden=true; return; } el.hidden=false;
+  const cur=teamIntCfg()||{days:{}}; if(!VH_INT) VH_INT={...(cur.days||{})};
+  const offDays=(teamOffCfg()||{}).days||[];
+  const dirty=!vhIntSame(VH_INT,cur.days);
+  const st=parse(vhOffStart()), when=vhOffStart()===TODAY?'today':VH_DOWL[st.getDay()]+' '+(st.getMonth()+1)+'/'+st.getDate();
+  el.innerHTML=`<div><h2 class="h2" style="font-size:20px">Program week by intensity</h2><p class="hint" style="margin-top:4px">Set how hard each day of the week is for everyone. Mound days move off any day set below high, and a day set to high with no mound day becomes a high-intensity throw. Starts ${when}; this week and past weeks don't change. Off days and a pitcher's own off-day picks still come first.</p></div>
+    <div class="vhrows">${[0,1,2,3,4,5,6].map(i=>offDays.includes(i)
+      ?`<div class="vhr"><b>${VH_DOW[i]}</b><span class="vhoffrow">Program off day</span></div>`
+      :`<div class="vhr"><b>${VH_DOW[i]}</b><div class="vhseg" role="group" aria-label="${VH_DOWL[i]} intensity">${VH_INTS.map(([v,t])=>`<button type="button" data-vhint="${i}" data-v="${v}" aria-pressed="${(VH_INT[i]||'')===v}">${t}</button>`).join('')}</div></div>`).join('')}</div>
+    <div class="row"><button type="button" class="btn ${dirty?'':'ghost'} sm" id="vhIntSave" ${dirty?'':'disabled'}>${dirty?'Save and rebuild every schedule':'Saved'}</button>${dirty?'<button type="button" class="btn ghost sm" id="vhIntUndo">Undo changes</button>':''}${Object.values(VH_INT).some(Boolean)?'<button type="button" class="btn ghost sm" id="vhIntClear">Set all back to Plan</button>':''}</div>
+    <p class="vhsum"><b>Now:</b> ${esc(vhIntText(cur))}</p>`;
+}
+function vhPushTeamInt(cfg){ staff().forEach(({id,a})=>{ a.coach=a.coach||{weeks:{},overrides:{}};
+  if((!!a.coach.teamInt===!!cfg)&&vhIntSame(a.coach.teamInt&&a.coach.teamInt.days,cfg&&cfg.days)&&(!cfg||(a.coach.teamInt.on===cfg.on))) return;
+  if(cfg) a.coach.teamInt=cfg; else delete a.coach.teamInt; try{ planCaches.delete(a); }catch(e){} coachChanged(id); }); }
+function vhSaveTeamInt(){
+  const days={}; Object.keys(VH_INT).forEach(k=>{ if(VH_INT[k]) days[k]=VH_INT[k]; });
+  const cfg=Object.keys(days).length?{days,on:vhOffStart(),at:new Date().toISOString()}:null;
+  if(cfg) S.teamInt=cfg; else delete S.teamInt; save();
+  vhPushTeamInt(cfg); try{ clearCache(); staff().forEach(({a})=>planCaches.delete(a)); }catch(e){}
+  VH_INT=null; renderCoach(); toast(cfg?'Week saved. Every schedule is rebuilt around it.':'Back to the plan for every day.');
+}
+function vhSyncTeamInt(){ try{ if(!isCoachUser()||window.VIEW_AS) return; const cfg=teamIntCfg(); if(cfg) vhPushTeamInt(cfg); }catch(e){} }
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-vhint]'); if(b&&VH_INT){ const i=b.dataset.vhint, v=b.dataset.v; if(v) VH_INT[i]=v; else delete VH_INT[i]; renderTeamInt(); return; }
+  if(e.target.closest&&e.target.closest('#vhIntSave')){ const hi=Object.values(VH_INT).filter(v=>v==='high').length; if(hi>=4){ toast('That is four or more high days a week. Take one or two down a level.'); return; } vhSaveTeamInt(); return; }
+  if(e.target.closest&&e.target.closest('#vhIntUndo')){ VH_INT=null; renderTeamInt(); return; }
+  if(e.target.closest&&e.target.closest('#vhIntClear')){ VH_INT={}; renderTeamInt(); return; }
+});
+{ const _rt=renderTeamOff; renderTeamOff=function(){ const r=_rt.apply(this,arguments); try{ renderTeamInt(); }catch(e){} return r; };
+  if(typeof loadTeam==='function'){ const _lt=loadTeam; loadTeam=async function(){ const r=await _lt.apply(this,arguments); vhSyncTeamInt(); return r; }; } }
 </script>
 
 </body>
