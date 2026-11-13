@@ -1296,6 +1296,17 @@ body.gated{background:#021F30}
 .cfoot-in img{width:120px!important;height:auto}
 .logo{width:86px}
 [data-injlift],[data-golift],#tab-lift,#tab-schedule{display:none!important}
+details.cvdd{padding:0}
+details.cvdd>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;min-height:56px}
+details.cvdd>summary::-webkit-details-marker{display:none}
+details.cvdd>summary>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+details.cvdd>summary h2{margin:0;font-size:19px}
+details.cvdd>summary small{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+details.cvdd>summary::after{content:'';flex:none;width:10px;height:10px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:-4px 4px 0 auto;transition:transform .15s}
+details.cvdd[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+details.cvdd>summary .chip{flex:none}
+details.cvdd>.cvdd-b{padding:0 18px 18px}
+#cvBody>details.cvdd+details.cvdd,#cvBody>details.cvdd+section,#cvBody>section+details.cvdd{margin-top:12px}
 </style>
 </head>
 <body>
@@ -1900,25 +1911,24 @@ function renderPlans(){
   const un=can?list.filter(({a})=>!assignedPlan(a,plMonth)):[];
   const mName=PLAN_MONTH_NAME[plMonth];
   document.getElementById('cvBody').innerHTML=`
-    <section class="panel stack" style="gap:10px"><div><h2 class="h2" style="font-size:20px">Plan database</h2><p class="hint">The monthly throwing calendars. Only coaches see this page.</p></div>
+    <details class="panel cvdd" data-dd="db" ${vhDD('db',true)}><summary><span><h2 class="h2">Plan database</h2><small>${esc(mName)} · ${plans.length} plan${plans.length===1?'':'s'}</small></span></summary><div class="stack cvdd-b" style="gap:10px"><p class="hint" style="margin-top:0">The monthly throwing calendars. Only coaches see this page.</p>
       <div class="seg3" id="plMon">${PLAN_MONTHS.map(mk=>`<button type="button" data-m="${mk}" aria-pressed="${mk===plMonth}">${PLAN_MONTH_NAME[mk].slice(0,3)}</button>`).join('')}</div>
       ${can?`<div class="plrel ${shown?'on':''}"><div><b>${shown?`${mName} is showing to players`:`${mName} is hidden from players`}</b><p class="hint">${shown?`Each assigned pitcher's ${mName} follows his plan.`:`Assign pitchers now. Their app keeps the regular schedule until you show ${mName}.`}</p></div>${head?`<button type="button" class="btn sm ${shown?'ghost':''}" id="plShow">${shown?'Hide from players':`Show ${mName} to players`}</button>`:''}</div>`
         :`<p class="hint">Everyone follows the ${mName} plan. It is already built into the schedule formula, so there is nothing to assign.</p>`}
-    </section>
+    </div></details>
     ${plans.map(P=>{ const who=on(P.id), open=plOpen===P.id;
-      return `<section class="panel stack plfile" style="gap:8px"><div class="lrow"><div><span class="lbl">File · ${esc(P.file)}</span><h2 class="h2" style="font-size:19px">${esc(P.title)}</h2></div>${P.auto?'':`<span class="chip ${who.length?'li':'of'}">${who.length} assigned</span>`}</div>
+      return `<details class="panel plfile cvdd" ${open?'open':''}><summary data-plopen="${P.id}"><span><span class="lbl">File · ${esc(P.file)}</span><h2 class="h2">${esc(P.title)}</h2></span>${P.auto?'':`<span class="chip ${who.length?'li':'of'}">${who.length} assigned</span>`}</summary><div class="stack cvdd-b" style="gap:8px">
         <p class="hint">${esc(P.sum)}</p>
         ${who.length?`<div class="chips">${who.map(({id,a})=>`<button type="button" class="pill" data-pid="${id}" style="cursor:pointer">${esc(a.name)}</button>`).join('')}</div>`:''}
-        <button type="button" class="btn ghost sm" data-plopen="${P.id}" style="align-self:flex-start">${open?'Hide calendar':'Show calendar'}</button>
-        ${open?(P.rt?rtTable(P):planCalendar(P)):''}</section>`; }).join('')}
-    ${can?`<section class="panel stack" style="gap:8px"><div class="lrow"><h2 class="h2" style="font-size:19px">Assign pitchers · ${mName}</h2><span class="hint">${list.length-un.length} of ${list.length} assigned</span></div>
+        ${open?(P.rt?rtTable(P):planCalendar(P)):''}</div></details>`; }).join('')}
+    ${can?`<details class="panel cvdd" data-dd="assign" ${vhDD('assign',false)}><summary><span><h2 class="h2">Assign pitchers · ${esc(mName)}</h2><small>${list.length-un.length} of ${list.length} assigned</small></span></summary><div class="stack cvdd-b" style="gap:8px">
       
       <div class="plassign">${list.map(({id,a})=>{ const cur=assignedPlan(a,plMonth)||'';
         return `<label class="plrow"><span><b>${esc(a.name)}</b><small>${esc([a.throws?(a.throws==='L'?'LHP':'RHP'):'',a.pre?'no account yet':''].filter(Boolean).join(' · '))}</small></span>
-          <span class="plsel"><select data-plassign="${id}" ${head?'':'disabled'} class="${cur?'':'unset'}"><option value="">Not assigned</option>${plans.map(P=>`<option value="${P.id}" ${cur===P.id?'selected':''}>${esc(P.file)}</option>`).join('')}</select>${cur&&PLAN_DB[cur]&&PLAN_DB[cur].rt?`<label class="pld1">Day 1<input type="date" data-pld1="${id}" value="${esc(assignedD1(a,plMonth)||rtPlan(a,plMonth,PLAN_DB[cur]).d1)}" ${head?'':'disabled'}></label>`:''}</span></label>`; }).join('')}</div></section>`:''}`;
+          <span class="plsel"><select data-plassign="${id}" ${head?'':'disabled'} class="${cur?'':'unset'}"><option value="">Not assigned</option>${plans.map(P=>`<option value="${P.id}" ${cur===P.id?'selected':''}>${esc(P.file)}</option>`).join('')}</select>${cur&&PLAN_DB[cur]&&PLAN_DB[cur].rt?`<label class="pld1">Day 1<input type="date" data-pld1="${id}" value="${esc(assignedD1(a,plMonth)||rtPlan(a,plMonth,PLAN_DB[cur]).d1)}" ${head?'':'disabled'}></label>`:''}</span></label>`; }).join('')}</div></div></details>`:''}`;
   document.getElementById('plMon').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; plMonth=b.dataset.m; plOpen=null; plDay=null; renderPlans(); };
   const sh=document.getElementById('plShow'); if(sh) sh.onclick=()=>{ setMonthShown(plMonth,!shown); renderPlans(); toast(shown?`${mName} hidden from players`:`${mName} is now showing to assigned pitchers`); };
-  document.querySelectorAll('[data-plopen]').forEach(b=>b.onclick=()=>{ plOpen=plOpen===b.dataset.plopen?null:b.dataset.plopen; plDay=null; renderPlans(); });
+  document.querySelectorAll('[data-plopen]').forEach(b=>b.onclick=e=>{ e.preventDefault(); const y=window.scrollY; setTimeout(()=>window.scrollTo(0,y),0); plOpen=plOpen===b.dataset.plopen?null:b.dataset.plopen; plDay=null; renderPlans(); });
   document.querySelectorAll('[data-plday]').forEach(b=>b.onclick=()=>{ plDay=b.dataset.plday; const y=window.scrollY; renderPlans(); window.scrollTo(0,y); });
   document.querySelectorAll('[data-plassign]').forEach(s=>s.onchange=()=>{ const y=window.scrollY; assignPlan(s.dataset.plassign,plMonth,s.value); renderPlans(); window.scrollTo(0,y); });
   document.querySelectorAll('[data-pld1]').forEach(inp=>inp.onchange=()=>{ const id=inp.dataset.pld1, a=C.athletes[id], cur=a&&assignedPlan(a,plMonth); if(!cur||!inp.value) return; const y=window.scrollY; assignPlan(id,plMonth,cur+'@'+inp.value); renderPlans(); window.scrollTo(0,y); toast('Day 1 set'); });
@@ -5657,22 +5667,21 @@ let VH_OFF=null;   // the draft being edited: {days:[0-6], dates:['YYYY-MM-DD']}
 const VH_DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], VH_DOWL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const vhOffSame=(a,b)=>JSON.stringify([(a&&a.days||[]).slice().sort(),(a&&a.dates||[]).slice().sort()])===JSON.stringify([(b&&b.days||[]).slice().sort(),(b&&b.dates||[]).slice().sort()]);
 const vhOffStart=()=>ymd(weekStart(todayD))===TODAY?TODAY:ymd(addDays(weekStart(todayD),7));   // off days start with the next full week, so the week in progress is never reshuffled
+function vhOffShort(c){ const d=(c&&c.days||[]).slice().sort().map(i=>VH_DOW[i]), x=(c&&c.dates||[]).filter(k=>k>=TODAY).length; return !d.length&&!x?'Not set':[d.length?'Off every '+d.join(', '):'',x?x+' date'+(x===1?'':'s'):''].filter(Boolean).join(' · '); }
 function vhOffText(c){ const d=(c&&c.days||[]).slice().sort().map(i=>VH_DOWL[i]), x=(c&&c.dates||[]).filter(k=>k>=TODAY).length;
   if(!d.length&&!x) return 'No program off days set. Pitchers pick their own off days.';
   return [d.length?`Off every ${d.join(' and ')}`:'', x?`${x} single date${x===1?'':'s'} off`:''].filter(Boolean).join(' · ')+'. Every pitcher\'s week is built around this.'; }
 function renderTeamOff(){
-  const host=document.querySelector('#tab-coach-view .content'); if(!host) return;
-  let el=document.getElementById('vhOff'); if(!el){ el=document.createElement('section'); el.id='vhOff'; el.className='panel stack vhoff'; const first=host.querySelector('.panel'); if(first&&first.nextSibling) host.insertBefore(el,first.nextSibling); else host.appendChild(el); }
-  if(!isCoachUser()||window.VIEW_AS){ el.hidden=true; return; } el.hidden=false;
+  const el=document.getElementById('vhOff'); if(!el) return;
   const cur=teamOffCfg()||{days:[],dates:[]}; if(!VH_OFF) VH_OFF={days:(cur.days||[]).slice(),dates:(cur.dates||[]).filter(k=>k>=TODAY)};
   const dirty=!vhOffSame(VH_OFF,{days:cur.days||[],dates:(cur.dates||[]).filter(k=>k>=TODAY)});
-  el.innerHTML=`<div class="lrow"><div><h2 class="h2" style="font-size:20px">Program off days</h2><p class="hint" style="margin-top:4px">Pick the days nobody throws. Each pitcher's schedule is rebuilt around them, starting ${(()=>{ const d=parse(vhOffStart()); return vhOffStart()===TODAY?'today':VH_DOWL[d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate(); })()}. This week and past weeks don't change.</p></div></div>
+  el.innerHTML=`<summary><span><h2 class="h2">Program off days</h2><small>${esc(vhOffShort(cur))}${dirty?' · unsaved changes':''}</small></span></summary><div class="stack cvdd-b"><p class="hint" style="margin-top:0">Pick the days nobody throws. Each pitcher's schedule is rebuilt around them, starting ${(()=>{ const d=parse(vhOffStart()); return vhOffStart()===TODAY?'today':VH_DOWL[d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate(); })()}. This week and past weeks don't change.</p>
     <div><span class="lbl">Off every week</span><div class="vhdays">${VH_DOW.map((d,i)=>`<button type="button" data-vhoffd="${i}" aria-pressed="${VH_OFF.days.includes(i)}" aria-label="${VH_DOWL[i]}">${d}</button>`).join('')}</div></div>
     <div><span class="lbl">Single dates off</span>
       <div class="vhdates">${VH_OFF.dates.slice().sort().map(k=>{ const d=parse(k); return `<span>${VH_DOW[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}<button type="button" data-vhoffx="${k}" aria-label="Remove ${k}">×</button></span>`; }).join('')||'<span style="border-style:dashed;padding-right:12px;color:var(--muted)">None</span>'}</div>
       <div class="row"><input type="date" id="vhOffDate" min="${vhOffStart()}" aria-label="Date to make an off day"><button type="button" class="btn ghost sm" id="vhOffAdd">Add date</button></div></div>
     <div class="row"><button type="button" class="btn ${dirty?'':'ghost'} sm" id="vhOffSave" ${dirty?'':'disabled'}>${dirty?'Save and rebuild every schedule':'Saved'}</button>${dirty?'<button type="button" class="btn ghost sm" id="vhOffUndo">Undo changes</button>':''}</div>
-    <p class="vhsum"><b>Now:</b> ${esc(vhOffText(cur))}</p>`;
+    <p class="vhsum"><b>Now:</b> ${esc(vhOffText(cur))}</p></div>`;
 }
 function vhPushTeamOff(cfg){
   let n=0; staff().forEach(({id,a})=>{ a.coach=a.coach||{weeks:{},overrides:{}}; if(vhOffSame(a.coach.teamOff,cfg)&&(!!a.coach.teamOff===!!cfg)) return;
@@ -5695,7 +5704,17 @@ document.addEventListener('click',e=>{
   if(e.target.closest&&e.target.closest('#vhOffSave')){ if(VH_OFF.days.length>=6){ toast('That leaves at most one day a week to throw. Take a day or two back off the list.'); return; } vhSaveTeamOff(); return; }
   if(e.target.closest&&e.target.closest('#vhOffUndo')){ VH_OFF=null; renderTeamOff(); return; }
 });
-{ const _rc=renderCoach; renderCoach=function(){ const r=_rc.apply(this,arguments); try{ renderTeamOff(); }catch(e){} return r; };
+// The program panels and every table on Plans are dropdowns; which ones are open is remembered while the app is open.
+const VH_DD={};
+const vhDD=(k,def)=>(k in VH_DD?VH_DD[k]:def)?'open':'';
+document.addEventListener('toggle',e=>{ const d=e.target; if(d&&d.matches&&d.matches('details.cvdd[data-dd]')) VH_DD[d.dataset.dd]=d.open; },true);
+function vhPlansTop(){
+  const body=document.getElementById('cvBody'); if(!body||cvTab!=='plans'||!isCoachUser()||window.VIEW_AS) return;
+  if(document.getElementById('vhOff')) return;
+  body.insertAdjacentHTML('afterbegin',`<details class="panel cvdd vhoff" id="vhOff" data-dd="off" ${vhDD('off',false)}></details><details class="panel cvdd vhint" id="vhInt" data-dd="int" ${vhDD('int',false)}></details>`);
+  renderTeamOff();
+}
+{ const _rp=renderPlans; renderPlans=function(){ const r=_rp.apply(this,arguments); try{ vhPlansTop(); }catch(e){} return r; };
   if(typeof loadTeam==='function'){ const _lt=loadTeam; loadTeam=async function(){ const r=await _lt.apply(this,arguments); vhSyncTeamOff(); return r; }; } }
 </script>
 
@@ -5720,23 +5739,22 @@ let VH_INT=null;   // draft: {0..6: 'light'|'mod'|'high'|'nothrow'}
 const VH_INTS=[['','Plan'],['light','Light'],['mod','Mod'],['high','High'],['nothrow','No throw']];
 const VH_INTL={light:'light',mod:'moderate',high:'high',nothrow:'no throw'};
 const vhIntSame=(a,b)=>{ const n=o=>JSON.stringify(Object.keys(o||{}).filter(k=>(o||{})[k]).sort().map(k=>[k,o[k]])); return n(a)===n(b); };
+function vhIntShort(c){ const d=c&&c.days||{}, ks=Object.keys(d).filter(k=>d[k]).sort(); return ks.length?ks.map(k=>VH_DOW[k]+' '+({light:'light',mod:'mod',high:'high',nothrow:'no throw'})[d[k]]).join(' · '):'Not set: the plan decides'; }
 function vhIntText(c){ const d=c&&c.days||{}, ks=Object.keys(d).filter(k=>d[k]).sort();
   if(!ks.length) return "Not set. Each day's intensity comes from the plan.";
   return ks.map(k=>`${VH_DOW[k]} ${VH_INTL[d[k]]}`).join(' · ')+". Every pitcher's week is built around this."; }
 function renderTeamInt(){
-  const off=document.getElementById('vhOff'); if(!off) return;
-  let el=document.getElementById('vhInt'); if(!el){ el=document.createElement('section'); el.id='vhInt'; el.className='panel stack vhint'; off.parentNode.insertBefore(el,off.nextSibling); }
-  if(!isCoachUser()||window.VIEW_AS){ el.hidden=true; return; } el.hidden=false;
+  const el=document.getElementById('vhInt'); if(!el) return;
   const cur=teamIntCfg()||{days:{}}; if(!VH_INT) VH_INT={...(cur.days||{})};
   const offDays=(teamOffCfg()||{}).days||[];
   const dirty=!vhIntSame(VH_INT,cur.days);
   const st=parse(vhOffStart()), when=vhOffStart()===TODAY?'today':VH_DOWL[st.getDay()]+' '+(st.getMonth()+1)+'/'+st.getDate();
-  el.innerHTML=`<div><h2 class="h2" style="font-size:20px">Program week by intensity</h2><p class="hint" style="margin-top:4px">Set how hard each day of the week is for everyone. Mound days move off any day set below high, and a day set to high with no mound day becomes a high-intensity throw. Starts ${when}; this week and past weeks don't change. Off days and a pitcher's own off-day picks still come first.</p></div>
+  el.innerHTML=`<summary><span><h2 class="h2">Program week by intensity</h2><small>${esc(vhIntShort(cur))}${dirty?' · unsaved changes':''}</small></span></summary><div class="stack cvdd-b"><p class="hint" style="margin-top:0">Set how hard each day of the week is for everyone. Mound days move off any day set below high, and a day set to high with no mound day becomes a high-intensity throw. Starts ${when}; this week and past weeks don't change. Off days and a pitcher's own off-day picks still come first.</p>
     <div class="vhrows">${[0,1,2,3,4,5,6].map(i=>offDays.includes(i)
       ?`<div class="vhr"><b>${VH_DOW[i]}</b><span class="vhoffrow">Program off day</span></div>`
       :`<div class="vhr"><b>${VH_DOW[i]}</b><div class="vhseg" role="group" aria-label="${VH_DOWL[i]} intensity">${VH_INTS.map(([v,t])=>`<button type="button" data-vhint="${i}" data-v="${v}" aria-pressed="${(VH_INT[i]||'')===v}">${t}</button>`).join('')}</div></div>`).join('')}</div>
     <div class="row"><button type="button" class="btn ${dirty?'':'ghost'} sm" id="vhIntSave" ${dirty?'':'disabled'}>${dirty?'Save and rebuild every schedule':'Saved'}</button>${dirty?'<button type="button" class="btn ghost sm" id="vhIntUndo">Undo changes</button>':''}${Object.values(VH_INT).some(Boolean)?'<button type="button" class="btn ghost sm" id="vhIntClear">Set all back to Plan</button>':''}</div>
-    <p class="vhsum"><b>Now:</b> ${esc(vhIntText(cur))}</p>`;
+    <p class="vhsum"><b>Now:</b> ${esc(vhIntText(cur))}</p></div>`;
 }
 function vhPushTeamInt(cfg){ staff().forEach(({id,a})=>{ a.coach=a.coach||{weeks:{},overrides:{}};
   if((!!a.coach.teamInt===!!cfg)&&vhIntSame(a.coach.teamInt&&a.coach.teamInt.days,cfg&&cfg.days)&&(!cfg||(a.coach.teamInt.on===cfg.on))) return;
